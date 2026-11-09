@@ -1,0 +1,12 @@
+#!/bin/bash
+# PBS job: train TS-VAD+.  Submit from ts-vad/:  qsub -v DIHARD_ROOT=...,MUSAN=...,RIRS=... job.pbs
+#PBS -q normal
+#PBS -j oe
+#PBS -l select=1:ncpus=16:mem=128gb:ngpus=1
+#PBS -N tsvad_train
+#PBS -l walltime=23:59:00
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(dirname "$0")}"
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate tsvad
+./run_train.sh

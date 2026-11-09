@@ -1,0 +1,12 @@
+#!/bin/bash
+# PBS job: simulated data preparation (embedding extraction).  Submit from ts-vad/prepare/:  qsub -v SIM_DATA=... prepare_sim.pbs
+#PBS -q normal
+#PBS -j oe
+#PBS -l select=1:ncpus=16:mem=180gb:ngpus=1
+#PBS -N tsvad_prepare_sim
+#PBS -l walltime=23:59:00
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(dirname "$0")}"
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate tsvad
+./prepare_simulated.sh
