@@ -1,4 +1,4 @@
-import glob, tqdm, os, soundfile, copy, json, argparse, numpy, torch, wave, heapq
+import glob, tqdm, os, soundfile, copy, json, argparse, numpy, torch, wave, heapq, shutil
 from collections import defaultdict
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class Segment(object):
@@ -61,6 +61,16 @@ def remove_overlap(aa, bb):
 	# Return the new list of intervals
 	return result
 
+def merge_intervals(ints):
+	"""Merge overlapping [start, end] intervals of one speaker."""
+	out = []
+	for s, e in sorted(ints):
+		if out and s <= out[-1][1]:
+			out[-1][1] = max(out[-1][1], e)
+		else:
+			out.append([s, e])
+	return out
+
 def init_speaker_encoder(source):
 	"""
 	Initializes a speaker encoder model with pre-trained weights from a given source file.
@@ -111,6 +121,10 @@ def get_args():
 	parser.add_argument('--length_embedding', type=float, default=6, help='length of embeddings, seconds')
 	parser.add_argument('--step_embedding', type=float, default=1, help='step of embeddings, seconds')
 	parser.add_argument('--batch_size', type=int, default=96, help='step of embeddings, seconds')
+	parser.add_argument('--min_clean_dur', type=float, default=2.0, help='seconds of non-overlapped speech needed to build a profile from clean speech only')
+	parser.add_argument('--min_speaker_dur', type=float, default=0.5, help='speakers with less profile audio than this are dropped')
+	parser.add_argument('--overlap_fallback', type=lambda v: str(v).lower() in ('1', 'true', 'yes'), default=True,
+		help='use overlapped speech for speakers below --min_clean_dur (false + --min_clean_dur 6 ~ original behaviour)')
 
 	args = parser.parse_args()
 	args.path = os.path.join(args.data_path, 'third_dihard_challenge_%s/data'%(args.type))
@@ -151,6 +165,7 @@ def main():
 	args = get_args()
 	
 	outs = open(args.out_text, "w")
+	stats = defaultdict(float)
 	# all.rttm is the concatenated ground truth used only for scoring; never treat it as a recording
 	rttms = sorted(r for r in glob.glob(args.path_rttm + '/*.rttm') if os.path.basename(r) != 'all.rttm')
 
@@ -201,71 +216,59 @@ def main():
 		orig_audio, _ = soundfile.read(wav_file)
 		length = len(orig_audio) 
 
-		# # Cut and save the clean speech part
-		id_full = wav_file.split("/")[-1][:-4]
-		# create a dictionary to store new_audio for each speaker and it's output_wav
-		new_audio_dict = {}
+		id_full = os.path.basename(wav_file)[:-4]
+		output_dir = os.path.join(args.target_wav, id_full)
+		# start clean so stale speaker files from an earlier run cannot leak into this one
+		shutil.rmtree(output_dir, ignore_errors = True)
+		shutil.rmtree(os.path.join(args.target_embedding, id_full), ignore_errors = True)
+		os.makedirs(output_dir, exist_ok = True)
+		n_frames = int(length / 16000 * 25) # 40ms, one label
 
-		for key in new_intervals:
-			output_dir = os.path.join(args.target_wav, id_full)
-			os.makedirs(output_dir, exist_ok = True)
-			output_wav = os.path.join(output_dir, str(key) + '.wav')
-			new_audio = []
-			labels = [0] * int(length / 16000 * 25) # 40ms, one label        
-			for interval in new_intervals[key]:
-				s, e = interval
-				for i in range(int(s * 25), min(int(e * 25) + 1, len(labels))):
-					labels[i] = 1 
-				s *= 16000
-				e *= 16000
-				new_audio.extend(orig_audio[int(s):int(e)])
-			
-			new_audio_dict[key] = [new_audio, output_wav]
+		def cut(ints):
+			parts = [orig_audio[int(s * 16000):int(e * 16000)] for s, e in ints]
+			return numpy.concatenate(parts) if parts else numpy.zeros(0)
 
-		# filter new_audio_dict to get the longest max_speaker speakers
-		new_audio_dict = dict(heapq.nlargest(args.max_speaker, new_audio_dict.items(), key=lambda item: len(item[1][0])))
-		mapping1 = {}
-		mapping = {}
-		# rename the output_wav in new_audio_dict to start from 1.wav
-		for i, key in enumerate(new_audio_dict):
-			new_audio_dict[key][1] = os.path.join(output_dir, str(i + 1) + '.wav')
-			# get filename without extension from new_audio_dict[key][1]
-			filename = new_audio_dict[key][1].split('/')[-1].split('.')[0]
-			# add mapping, with key as filename, utterance_id and value as str(i + 1)
-			mapping1[str(key)] = filename
-			mapping[str(key)] = str(i+1)
-		# initialise good_speakers set
-		good_speakers = set()
-
-		# use soundfile to write the audios in new_audio_dict to output_wav
-		for key in new_audio_dict:
-			if (new_audio_dict[key][0] != []):
-				if (len(new_audio_dict[key][0]) < 16000 * 6):
-					# get the speaker_id from new_audio_dict[key][1]
-					speaker_idd = new_audio_dict[key][1].split('/')[-1].split('.')[0]
-				else:
-					soundfile.write(new_audio_dict[key][1], new_audio_dict[key][0], 16000)
-					speaker_idd = new_audio_dict[key][1].split('/')[-1].split('.')[0]
-					good_speakers.add(speaker_idd)
-			
-		output_wav = os.path.join(output_dir, 'all.wav')
-		soundfile.write(output_wav, orig_audio, 16000)
-		# Save the labels
-		for key in new_intervals:
-			speaker_id = "speaker" + str(key)
-			if (str(key) not in mapping1.keys()):
+		# Profile audio for each speaker: non-overlapped speech if there is enough of it, otherwise all of
+		# the speaker's speech (overlap included). The original script silently dropped every speaker with
+		# < 6 s of non-overlapped speech, which made all of their speech unrecoverable missed speech.
+		candidates = {}
+		for key in intervals:
+			total = sum(max(0.0, e - s) for s, e in merge_intervals(intervals[key]))
+			clean = sum(max(0.0, e - s) for s, e in new_intervals[key])
+			if clean >= args.min_clean_dur:
+				audio, source = cut(new_intervals[key]), 'clean'
+			elif args.overlap_fallback:
+				audio, source = cut(merge_intervals(intervals[key])), 'with_overlap'
+			else:
+				stats['dropped_short'] += 1; stats['dropped_speech_s'] += total
 				continue
-			labels = [0] * int(length / 16000 * 25) # 40ms, one label        
-			for interval in intervals[key]:
-				s, e = interval
+			if len(audio) < args.min_speaker_dur * 16000:
+				stats['dropped_short'] += 1; stats['dropped_speech_s'] += total
+				continue
+			candidates[key] = {'total': total, 'audio': audio, 'source': source}
+
+		# keep the max_speaker speakers who talk the most; ids are 1..N without gaps
+		kept = sorted(candidates, key = lambda k: candidates[k]['total'], reverse = True)
+		for key in kept[args.max_speaker:]:
+			stats['dropped_max_speaker'] += 1; stats['dropped_speech_s'] += candidates[key]['total']
+		kept = kept[:args.max_speaker]
+		for idx, key in enumerate(kept, start = 1):
+			soundfile.write(os.path.join(output_dir, '%d.wav' % idx), candidates[key]['audio'], 16000)
+			stats['kept_' + candidates[key]['source']] += 1
+			labels = [0] * n_frames
+			for s, e in intervals[key]:
 				for i in range(int(s * 25), min(int(e * 25) + 1, len(labels))):
 					labels[i] = 1
-			if mapping1[str(key)] in good_speakers:
-				res = {'filename':id_full, 'speaker_key':mapping[str(key)], 'speaker_id': speaker_id, 'labels':labels}
-				
-				json.dump(res, outs)
+			res = {'filename': id_full, 'speaker_key': str(idx), 'speaker_id': 'speaker' + str(key), 'labels': labels}
+			json.dump(res, outs)
+			outs.write('\n')
+		soundfile.write(os.path.join(output_dir, 'all.wav'), orig_audio, 16000)
 
-				outs.write('\n')
+	outs.close()
+	print('Speakers kept: %d with clean profile, %d with overlap-included profile (< %.1f s clean speech); '
+		  'dropped: %d too short (< %.1f s), %d beyond max_speaker=%d; speech of dropped speakers: %.1f s'
+		  % (stats['kept_clean'], stats['kept_with_overlap'], args.min_clean_dur, stats['dropped_short'], args.min_speaker_dur,
+			 stats['dropped_max_speaker'], args.max_speaker, stats['dropped_speech_s']))
 
 	# Extract embeddings
 	files = sorted(glob.glob(args.target_wav + "/*/*.wav"))
@@ -275,8 +278,10 @@ def main():
 		if 'all.wav' not in file:
 			embeddings = []
 			wav_length = wave.open(file, 'rb').getnframes() # entire length for target speech
-			for start in range(0, wav_length - int(args.length_embedding * 16000), int(args.step_embedding * 16000)):
-				stop = start + int(args.length_embedding * 16000)
+			win = int(args.length_embedding * 16000)
+			starts = list(range(0, wav_length - win, int(args.step_embedding * 16000))) if wav_length > win else [0]
+			for start in starts:
+				stop = min(start + win, wav_length)
 				target_speech, _ = soundfile.read(file, start = start, stop = stop)
 				target_speech = torch.FloatTensor(numpy.array(target_speech))
 				with torch.no_grad():

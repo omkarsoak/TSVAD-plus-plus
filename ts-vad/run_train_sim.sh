@@ -10,14 +10,16 @@ RIRS=${RIRS:-/path/to/RIRS_NOISES/simulated_rirs}
 SAVE_PATH=${SAVE_PATH:-exps/simtrain_ecapa_8spk}
 MAX_SPEAKER=${MAX_SPEAKER:-8}
 
-EVAL="$DIHARD_ROOT/third_dihard_challenge_eval/data"
+DEV="$DIHARD_ROOT/third_dihard_challenge_dev/data"   # validation = held-out dev split (never the eval set)
 
 python main.py \
 --train_list "$SIM_ROOT/all_simtrain.json" \
---eval_list "$EVAL/ts_eval.json" \
+--eval_list "$DEV/ts_val.json" \
 --train_path "$SIM_ROOT" \
---eval_path "$EVAL" \
---ref_rttm "$EVAL/rttm/all.rttm" \
+--eval_path "$DEV" \
+--ref_rttm "$DEV/val_all.rttm" \
+--uem_dir "$DEV/uem_scoring/full" \
+--eval_epochs "${EVAL_EPOCHS:-all}" \
 --musan_path "$MUSAN" \
 --rir_path "$RIRS" \
 --save_path "$SAVE_PATH" \

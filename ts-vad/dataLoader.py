@@ -3,8 +3,9 @@ from collections import defaultdict
 from scipy import signal
 
 def init_loader(args):
-	trainloader = train_loader(**vars(args))
-	args.trainLoader = torch.utils.data.DataLoader(trainloader, batch_size = args.batch_size, shuffle = True, num_workers = args.n_cpu, drop_last = True)
+	if args.train: # eval-only runs do not need (and should not scan) the training list
+		trainloader = train_loader(**vars(args))
+		args.trainLoader = torch.utils.data.DataLoader(trainloader, batch_size = args.batch_size, shuffle = True, num_workers = args.n_cpu, drop_last = True)
 	evalLoader = eval_loader(**vars(args))
 	args.evalLoader = torch.utils.data.DataLoader(evalLoader, batch_size = args.batch_size, shuffle = False, num_workers = args.n_cpu, drop_last = False)
 	return args
@@ -21,6 +22,8 @@ class train_loader(object):
 				self.noiselist[file.split('/')[-3]] = []
 			self.noiselist[file.split('/')[-3]].append(file)
 		self.rir_files  = glob.glob(os.path.join(rir_path,'*/*/*.wav'))
+		if not self.rir_files or not self.noiselist.get('noise'):
+			print("Augmentation: %d RIR files, %d MUSAN noise files found; missing types are skipped" % (len(self.rir_files), len(self.noiselist.get('noise', []))))
 
 		self.train_path = train_path
 		self.simtrain = simtrain
@@ -31,6 +34,7 @@ class train_loader(object):
 		self.label_dic = defaultdict(list)
 		self.speaker_to_utt = defaultdict(list)
 		self.room_to_speaker = defaultdict(list)
+		self.filler_cache = {}  # recording -> candidate filler entries from other recordings
 
 		lines = open(train_list).read().splitlines()
 		filename_set = set()
@@ -96,7 +100,13 @@ class train_loader(object):
 		
 		frame_len = int(self.rs_len / 25 * 16000) + 240
 		ref_speech = numpy.expand_dims(numpy.array(ref_speech), axis = 0)
-		augtype = random.randint(0,2)
+		# 0 = clean, 1 = reverb (needs RIRs), 2 = noise (needs MUSAN); skip types whose data is missing
+		augtypes = [0]
+		if self.rir_files:
+			augtypes.append(1)
+		if self.noiselist.get('noise'):
+			augtypes.append(2)
+		augtype = random.choice(augtypes)
 		if augtype == 0:
 			ref_speech = ref_speech
 		elif augtype == 1:
@@ -124,10 +134,18 @@ class train_loader(object):
 			if speaker_id != 0:
 				path = self.train_path + '/target_embedding/' + file + '/' + str(speaker_id) + '.pt'
 			else:
-				speakers_in_this_videos = self.room_to_speaker[file]
-				candidate_speakers = [k for k in self.speaker_to_utt.keys() if k not in speakers_in_this_videos]
-				random_speaker = random.choice(candidate_speakers)
-				random_file = random.choice(self.speaker_to_utt[random_speaker])
+				# Filler slot: embedding of a speaker from a DIFFERENT recording (all-zero labels).
+				# Prefer speaker names not used in this recording (meaningful when names are global
+				# speaker IDs, e.g. simulated data); DIHARD reuses "speaker1.." in every recording, so
+				# fall back to any speaker of another recording instead of failing.
+				if file not in self.filler_cache:
+					speakers_in_this_videos = set(self.room_to_speaker[file])
+					other = [u for k, utts in self.speaker_to_utt.items() for u in utts if not u.startswith(file + '_')]
+					preferred = [u for k, utts in self.speaker_to_utt.items() if k not in speakers_in_this_videos for u in utts if not u.startswith(file + '_')]
+					if not other:
+						raise RuntimeError('Need at least 2 recordings in the training list to fill empty speaker slots')
+					self.filler_cache[file] = preferred if preferred else other
+				random_file = random.choice(self.filler_cache[file])
 				prefix = random_file[:random_file.rfind('_')]
 				path = self.train_path + '/target_embedding/' + prefix + '/' + str(random_file.split('_')[-1]) + '.pt'
 			

@@ -115,7 +115,7 @@ Speaker labels may be `speakerX` (DIHARD ground truth) or bare labels such as `1
 
 ```bash
 cd ts-vad/prepare
-DIHARD_ROOT=/abs/path/to/DIHARD3 MAX_SPEAKER=8 ./prepare_dihard.sh          # runs dev and eval
+DIHARD_ROOT=/abs/path/to/DIHARD3 MAX_SPEAKER=8 ./prepare_dihard.sh          # dev (+ train/val split) and eval
 # or on a PBS cluster:  qsub -v DIHARD_ROOT=/abs/path/to/DIHARD3 prepare_job.pbs
 ```
 
@@ -128,11 +128,33 @@ third_dihard_challenge_{dev,eval}/data
 ├── target_audio/DH_*/{1.wav, 2.wav, ..., all.wav}     # single-speaker audio per speaker + full mix
 ├── target_embedding/DH_*/{1.pt, 2.pt, ...}            # ECAPA-TDNN embeddings, 6 s window / 1 s step
 └── ts_{dev,eval}.json                                  # 40 ms frame labels per speaker
+
+third_dihard_challenge_dev/data  (written by split_dev.py)
+├── ts_train.json, ts_val.json                          # dev recordings split ~80/20, stratified by domain
+├── val_recordings.txt                                  # validation recordings + domain
+└── val_all.rttm                                        # ground truth of the validation recordings
 ```
 
 Notes:
-- At most `--max_speaker` speakers (the ones with the most speech) are kept per recording. Use the same value for preparation and training.
-- Speakers with less than 6 s of non-overlapped speech get no embedding and are dropped. Their speech always counts as missed speech, so this is a known source of DER.
+- At most `--max_speaker` speakers (the ones who talk most) are kept per recording. Use the same value for preparation and training.
+- **Speaker profiles for speakers with little speech.** A speaker's profile is built from their non-overlapped speech when there is at least `MIN_CLEAN_DUR` (2 s) of it. Otherwise it is built from all of their speech, overlap included. Only speakers with less than `MIN_SPEAKER_DUR` (0.5 s) are dropped. Profiles shorter than the 6 s embedding window get a single embedding over the whole clip. The original code dropped every speaker with less than 6 s of clean speech, so their speech was always missed. The script prints how many speakers were kept or dropped and how much speech the dropped ones had. `MIN_CLEAN_DUR=6 MIN_SPEAKER_DUR=6` plus `--overlap_fallback false` roughly restores the old behaviour.
+- **Validation split.** `split_dev.py` (run automatically after dev) holds out about 20% of the dev recordings (`VAL_FRAC`, `SEED`), stratified by the domains in `data/uem_scoring/full/*.uem`. Training uses `ts_train.json`; epochs, checkpoint averaging and post-processing are chosen on `ts_val.json`. The eval set is scored once at the end.
+
+## Quick local test (CPU, small subset)
+
+Before using the cluster, you can check the whole pipeline on a laptop. Without a GPU the code runs on CPU automatically, and MUSAN/RIRs are optional (missing augmentation types are skipped).
+
+```bash
+cd ts-vad
+# 1. copy 5 dev + 5 eval recordings (wav + rttm + uem_scoring) into a mini tree; eval rttms = ground truth (oracle)
+./prepare/make_mini_dihard.sh /abs/path/DIHARD3 /abs/path/DIHARD3_mini 5
+# 2. targets + ECAPA embeddings + train/val split (use the same MAX_SPEAKER as the smoke run)
+DIHARD_ROOT=/abs/path/DIHARD3_mini MAX_SPEAKER=4 ./prepare/prepare_dihard.sh
+# 3. the real pipeline with tiny settings: train 2 epochs (WavLM frozen, batch 2) -> average -> tune on val -> eval
+DIHARD_ROOT=/abs/path/DIHARD3_mini ./run_smoke.sh
+```
+
+Outputs go to `ts-vad/exps/smoke/` (training) and `ts-vad/exps/smoke/final/` (validation, tuned post-processing, eval). Expect the loss to fall slightly and DER to stay high. This run checks that the code works, not model quality. On synthetic data it takes about 2 minutes and 1.5 GB of RAM.
 
 ## Training on DIHARD3
 
@@ -156,19 +178,21 @@ qsub  -v DIHARD_ROOT=...,MUSAN=...,RIRS=...,SAVE_PATH=... job.pbs
 sbatch --export=ALL,DIHARD_ROOT=...,MUSAN=...,RIRS=...,SAVE_PATH=... job.slurm
 ```
 
+Training uses `ts_train.json` and validates on the held-out dev recordings (`ts_val.json`, `val_all.rttm`) after every epoch (`EVAL_EPOCHS=all`). The eval set is not touched. The checkpoint with the lowest validation DER (collar 0) is copied to `SAVE_PATH/model/best.model` (score in `SAVE_PATH/best.json`). Hyperparameters can be overridden from the environment: `BATCH_SIZE`, `MAX_EPOCH`, `WARM_UP_EPOCH`, `LR`, `LR_DECAY`, `N_CPU`, `SPEECH_ENCODER`.
+
 Adjust the queue / resource lines (`#PBS -q`, `#SBATCH --gres`, memory) to your cluster. If the job is restarted, training resumes automatically from the latest `SAVE_PATH/model/model_XXXX.model`. This also applies when fine-tuning with `INIT_MODEL`: existing checkpoints in `SAVE_PATH` take priority. So use a fresh `SAVE_PATH` for each new experiment.
 
 The equivalent direct command:
 
 ```bash
 python main.py \
-  --train_list $DEV/ts_dev.json   --train_path $DEV \
-  --eval_list  $EVAL/ts_eval.json --eval_path  $EVAL \
-  --ref_rttm   $EVAL/rttm/all.rttm \
+  --train_list $DEV/ts_train.json --train_path $DEV \
+  --eval_list  $DEV/ts_val.json   --eval_path  $DEV \
+  --ref_rttm   $DEV/val_all.rttm  --uem_dir $DEV/uem_scoring/full \
   --musan_path $MUSAN --rir_path $RIRS \
   --save_path  exps/dihard3_ecapa_8spk \
   --max_speaker 8 --warm_up_epoch 5 --batch_size 40 --rs_len 4 --test_shift 4 \
-  --lr 0.0001 --lr_decay 0.95 --test_step 1 --max_epoch 60 --train
+  --lr 0.0001 --lr_decay 0.95 --test_step 1 --max_epoch 60 --eval_epochs all --train
 ```
 
 Key options:
@@ -178,8 +202,11 @@ Key options:
 | `--max_speaker` | 8 | Speaker slots per chunk; must match data preparation |
 | `--warm_up_epoch` | 10 | WavLM is frozen for epochs before this |
 | `--rs_len` | 16 | Chunk length in seconds (scripts use 4) |
-| `--eval_epochs` | `12,18,30,...` | Epochs at which DIHARD3 eval is run during training, or `all` |
+| `--eval_epochs` | `12,18,30,...` (scripts: `all`) | Epochs at which the eval list (validation in the scripts) is scored, or `all` |
 | `--ref_rttm` | `<eval_path>/rttm/all.rttm` | Ground-truth RTTM for DER; scoring is skipped if missing |
+| `--uem_dir` | – | Folder of `<domain>.uem` files; adds a per-domain DER table |
+| `--threshold`, `--median_kernel`, `--min_silence`, `--min_speech` | 0.5, 21, 0.32, 0 | Post-processing (see Evaluation) |
+| `--postproc_json` | – | Load the four post-processing settings from `tune_postproc.py` output |
 | `--init_model` | – | Start from a checkpoint (fine-tuning) |
 | `--legacy_head` | false | Use the old output head; only for checkpoints trained before the head fix (see below) |
 
@@ -188,8 +215,10 @@ Key options:
 ```
 SAVE_PATH/
 ├── model/model_0001.model ...   # one checkpoint per epoch
-├── score.txt                    # "Train: N epoch, LR, LOSS" + "Eval full 0.25 / 0.00: DER, MS, FA, SC"
-└── res_rttm                     # TS-VAD output of the most recent evaluation
+├── model/best.model             # lowest validation DER so far (best.json has epoch + DER)
+├── score.txt                    # "Train: N epoch, LR, LOSS", "Eval full 0.25 / 0.00: DER, MS, FA, SC", per-domain tables
+├── probs.npz                    # per-frame speaker probabilities of the latest evaluation
+└── res_rttm                     # RTTM of the latest evaluation
 ```
 
 DER is reported at collar 0.25 s and at **collar 0.00 s (the DIHARD3 metric)**. MS = missed speech, FA = false alarm, SC = speaker confusion.
@@ -244,15 +273,41 @@ SAVE_PATH=exps/dihard3_finetune DIHARD_ROOT=... MUSAN=... RIRS=... ./run_train.s
 
 ## Evaluation
 
+### Final result (use this for reported numbers)
+
 ```bash
 cd ts-vad
-DIHARD_ROOT=/abs/path/to/DIHARD3 \
-MODEL=exps/dihard3_ecapa_8spk/model/model_0030.model \
-SAVE_PATH=exps/eval_e30 \
-./run_eval.sh
+DIHARD_ROOT=/abs/path/to/DIHARD3 TRAIN_DIR=exps/dihard3_ecapa_8spk ./run_final.sh
 ```
 
-This uses a 0.5 s test shift (overlapping windows are averaged), a median filter, `--threshold 0.5` and `--min_silence 0.32`. It writes `SAVE_PATH/res_rttm` and prints DER/MS/FA/SC.
+`run_final.sh` keeps every choice on validation data:
+
+1. **Checkpoint averaging:** averages the weights of the `AVG_N` (5) epochs with the lowest validation DER (`average_checkpoints.py`). Set `MODEL=...` to use one checkpoint instead.
+2. **Validation inference** with a 0.5 s shift (overlapping windows are averaged); saves `probs.npz`.
+3. **Post-processing tuning** on validation only (`tune_postproc.py`): a grid over threshold, median-filter length, `min_silence` and `min_speech` (336 settings, run in parallel), with the best written to `postproc.json`.
+4. **Eval set, scored once** with those settings: overall DER at collars 0.25 / 0, plus a per-domain table.
+
+```
+TRAIN_DIR/final/
+├── avg_best5.model
+├── val/   score.txt, probs.npz, res_rttm
+├── postproc.json                # chosen settings + the full grid
+└── test/  score.txt, probs.npz, res_rttm    # the number to report
+```
+
+Re-tune without re-running the model: `python tune_postproc.py --probs <val>/probs.npz --ref <dev>/val_all.rttm --out postproc.json`.
+
+### Quick check of one checkpoint
+
+```bash
+DIHARD_ROOT=/abs/path/to/DIHARD3 MODEL=exps/dihard3_ecapa_8spk/model/best.model SAVE_PATH=exps/eval_best ./run_eval.sh
+```
+
+This uses the default post-processing (or `POSTPROC_JSON=...`) and writes `SAVE_PATH/res_rttm`. Any RTTM can be scored with `python scoring_utils.py --ref <ref.rttm> --sys <sys.rttm> [--uem_dir <data>/uem_scoring/full]`.
+
+### RTTM timing fix
+
+Frame *i* covers [0.04·i, 0.04·(i+1)) s. The original RTTM writer stored each segment's start as the index of the silent frame before it, so every segment (except one starting at 0 s) was written 40 ms early. Shifting the bundled `scoring/res.rttm` by 40 ms lowers its DER from 24.40% to **23.84%** at collar 0 (11.65% → 11.61% at collar 0.25) with no retraining. New RTTMs are written correctly.
 
 ### Official-style scoring (per domain, CORE set)
 
@@ -268,7 +323,7 @@ Per-domain results are written to `scoring/individual_scores/`.
 
 ### What to expect
 
-- Example: the RTTM bundled in `scoring/res.rttm` scores **DER 24.40%** at collar 0 (MS 13.1%, SC 3.7%, FA ≈ 7.6%) and 11.65% at collar 0.25 against `scoring/all_rttm` (md-eval, full set, no UEM).
+- Example: the RTTM bundled in `scoring/res.rttm` scores **DER 24.40%** at collar 0 (MS 13.12%, FA 7.62%, SC 3.65%) and 11.65% at collar 0.25 against `scoring/all_rttm` (md-eval, full set, no UEM). With the 40 ms timing fix: 23.84%.
 - The best configuration in the Results Summary above reached 19.11%.
 - With VBx RTTMs as speaker input, DER at collar 0 should be roughly in the 19–25% range. With oracle (ground-truth) speaker profiles it should be clearly lower.
 - Most of the remaining error is missed speech, not speaker confusion.
@@ -289,7 +344,8 @@ The results table was produced with the old head. Re-train to measure the effect
 
 - Speaker embeddings come from an ECAPA-TDNN trained on CnCeleb1+2 and the AliMeeting training set.
 - If scripts are not executable after cloning: `chmod +x ts-vad/*.sh ts-vad/prepare/*.sh scoring/*.sh scoring/utils/*.py scoring/utils/parse_options.sh`.
-- Epochs and thresholds in the results above were selected on the DIHARD3 eval set. For an unbiased number, hold out part of the dev set for model selection and evaluate on eval once.
+- Epochs and thresholds in the Results Summary were selected on the DIHARD3 eval set. The current scripts select them on a held-out dev split instead (`run_train.sh` + `run_final.sh`), so new numbers are not directly comparable with that table.
+- The validation speaker profiles come from ground-truth dev RTTMs (oracle), while eval profiles come from clustering output. Validation DER is therefore lower than eval DER, and post-processing tuned on validation may not be exactly optimal for eval. To match eval conditions, run your clustering (e.g. VBx) on the validation recordings and prepare them as a separate split: put `wav/` and the clustering RTTMs in `third_dihard_challenge_devval/data/` and run `TYPES=devval ./prepare/prepare_dihard.sh`. Then point validation at that folder (`--eval_path`, `--eval_list .../ts_devval.json`), keeping `val_all.rttm` as the reference.
 - `model/selective_scan_interface.py` (Mamba) and `prepare/prepare_dihard_old.py` are not used by the default pipeline.
 
 ## References

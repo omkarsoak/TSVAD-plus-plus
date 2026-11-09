@@ -1,0 +1,10 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Personal notes
+resume.md
+explaination.md
+# Unzipped from tools.zip (md-eval scorer + helpers)
+ts-vad/tools
+ts-vad/tools.zip

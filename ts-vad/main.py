@@ -1,4 +1,4 @@
-import argparse, glob, os, warnings, time
+import argparse, glob, os, warnings, time, json, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -32,6 +32,9 @@ parser.add_argument('--test_shift', type=float, default=16,      help='Input shi
 parser.add_argument('--min_silence', type=float, default=0.32,      help='Remove the speech with short slience during testing')
 parser.add_argument('--min_speech', type=float, default=0.00,      help='Combine the short speech during testing')
 parser.add_argument('--threshold', type=float, default=0.50,      help='The threshold during testing')
+parser.add_argument('--median_kernel', type=int, default=21,      help='Median filter length in frames (odd; 1 = off)')
+parser.add_argument('--postproc_json', type=str, default='',      help='JSON from tune_postproc.py; overrides threshold/median_kernel/min_silence/min_speech')
+parser.add_argument('--uem_dir', type=str, default='',      help='Directory of <domain>.uem files (e.g. <eval_path>/uem_scoring/full) for per-domain DER')
 parser.add_argument('--init_model',  type=str,   default="",  help='Init TS-VAD model from pretrain')
 
 ### Data path
@@ -56,6 +59,12 @@ args = parser.parse_args()
 if args.ref_rttm == '':
 	args.ref_rttm = os.path.join(args.eval_path, 'rttm', 'all.rttm')
 args = init_system(args)
+args.probs_save_path = os.path.join(args.save_path, 'probs.npz')
+if args.postproc_json:
+	import postprocess
+	for k, v in postprocess.load_params(args.postproc_json).items():
+		setattr(args, k, v)
+	print('Post-processing loaded from %s: threshold %s, median_kernel %s, min_silence %s, min_speech %s' % (args.postproc_json, args.threshold, args.median_kernel, args.min_silence, args.min_speech))
 s = init_trainer(args)
 args = init_loader(args)
 
@@ -77,6 +86,13 @@ if args.train == True:
 		if args.epoch % args.test_step == 0:
 			s.save_parameters(args.model_save_path + "/model_%04d.model"%args.epoch)
 			if args.eval_epochs == 'all' or args.epoch in [int(e) for e in args.eval_epochs.split(',') if e.strip()]:
-				s.eval_network(args)
+				der = s.eval_network(args)
+				# keep the checkpoint with the lowest collar-0 DER on the eval/validation list
+				best_file = os.path.join(args.save_path, 'best.json')
+				best = json.load(open(best_file)) if os.path.isfile(best_file) else {'DER': float('inf')}
+				if der is not None and der < best['DER']:
+					shutil.copyfile(args.model_save_path + "/model_%04d.model"%args.epoch, args.model_save_path + "/best.model")
+					json.dump({'epoch': args.epoch, 'DER': der}, open(best_file, 'w'))
+					print("New best model: epoch %d, DER %.2f%% -> %s/best.model" % (args.epoch, der, args.model_save_path))
 		args.epoch += 1
 	quit()
