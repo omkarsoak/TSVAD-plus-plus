@@ -3,7 +3,7 @@
 TS-VAD++ is a transformer based speaker diarization system that detects "who spoke when" in multi-speaker audio, including overlapped speech. It takes raw speech, encoded by the first six layers of WavLM, and one ECAPA-TDNN speaker profile per target speaker. A speaker detection transformer processes each speaker's stream, a combining transformer merges the streams, and a per-frame head gives one speech probability per speaker. Post-processing turns these into an RTTM file.
 
 <p align="center">
-  <img src="tsvad_plus_plus_architecture.pdf" alt="TS-VAD++ Model Architecture" width="400"/>
+  <img src="tsvad_plus_plus_architecture.png" alt="TS-VAD++ Model Architecture" width="400"/>
 </p>
 
 ## Differences from the original TS-VAD (2020)
