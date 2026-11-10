@@ -2,9 +2,9 @@
 __pycache__/
 *.py[cod]
 
-# Personal notes
-resume.md
-explaination.md
+CLAUDE.md
+tsvad_architecture.png
+diagrams/
 # Unzipped from tools.zip (md-eval scorer + helpers)
 ts-vad/tools
 ts-vad/exps/*/model/
