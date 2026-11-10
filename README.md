@@ -1,39 +1,41 @@
-# TS-VAD+ : A Transformer-based Approach for Speaker Diarization
+# TS-VAD++: Overlap-Aware Speaker Diarization
 
 ## Model Summary
 
-TS-VAD+ is a transformer-based speaker diarization system designed to detect "who spoke when" in multi-speaker audio. It processes two inputs: (1) raw speech, encoded using a WavLM model into frame-level acoustic features, and (2) speaker profiles, extracted from single-speaker audio segments using ECAPA-TDNN embeddings. These inputs are passed through a two-stage transformer architecture—first to perform independent speaker activity detection for each speaker, and then to integrate outputs into a unified probability stream. The final predictions are postprocessed to generate RTTM files. Compared to traditional clustering-based pipelines and EEND models, TS-VAD+ is more robust in overlapping speech scenarios and requires less training data.
+TS-VAD++ is a transformer based speaker diarization system that detects "who spoke when" in multi-speaker audio, including overlapped speech. It takes two inputs: (1) raw speech, encoded by the first six layers of a WavLM model into frame-level features, and (2) one speaker profile per target speaker, an ECAPA-TDNN embedding extracted from that speaker's audio. A speaker detection transformer processes each speaker's stream separately, and a combining transformer then merges the streams so that every frame gets one speech probability per speaker. Post-processing turns these probabilities into an RTTM file.
 
 <p align="center">
-  <img src="tsvad_plus_architecture.png" alt="TS-VAD+ Model Architecture" width="400"/>
+  <img src="tsvad_architecture.png" alt="TS-VAD++ Model Architecture" width="400"/>
 </p>
 
-<p align="center"><em>Figure: TS-VAD+ model architecture</em></p>
+<p align="center"><em>Figure: TS-VAD++ model architecture</em></p>
 
+## Differences from the original TS-VAD (2020)
 
-## Improvements Over Baseline TS-VAD
+The original TS-VAD (Medennikov et al., 2020) computes MFCC features and passes them through a 4 layer CNN. A shared 2 layer BLSTMP speaker detection block then processes the features together with one i-vector per target speaker. A 1 layer BLSTMP combines the speaker streams, and the model has a fixed set of 4 speaker outputs.
 
-This repository presents TS-VAD+, a significant enhancement over the original TS-VAD diarization model. The following upgrades were implemented:
+TS-VAD++ keeps the same two stage layout (per speaker detection, then combination) and changes the parts around it:
 
-- **ECAPA-TDNN Speaker Embeddings**: Replaced traditional i-vectors with ECAPA-TDNN to improve speaker representation and robustness in noisy and overlapping speech.
-- **WavLM-based Feature Extraction**: Integrated a WavLM encoder, pre-trained on noisy and multi-speaker scenarios, for more discriminative acoustic features.
-- **Wideband Simulated Pretraining**: Developed a 16kHz simulated dataset from LibriSpeech for better domain adaptation to DIHARD III data.
-- **Improved Clustering**: Used VBx instead of x-vector clustering, reducing DER significantly before model input.
-- **Memory-Aware Attention (mm-TS-VAD+)**: Introduced a memory module that dynamically refines speaker embeddings using external cluster centroids.
-- **Data Augmentation**: Mixed single- and two-speaker DIHARD III recordings to generate new, realistic overlapping speech conditions.
-- **VAD Postprocessing**: Applied pyannote’s VAD to further clean false alarms and reduce overall DER.
+- **Features**: WavLM (first 6 of 12 layers) replaces MFCC plus CNN.
+- **Speaker profiles**: ECAPA-TDNN embeddings (192 dims, 6 s windows) replace i-vectors. Speakers with little speech still get a profile (clean speech if there is enough, otherwise all of their speech).
+- **Sequence modelling**: transformer layers replace the BLSTMP layers in both stages.
+- **Output head**: a per-frame linear layer maps each frame to all speaker outputs. An earlier head mixed the time and speaker axes and only worked for 2 speakers (see "Output head fix").
+- **Speaker count**: `--max_speaker` (default 8) instead of a fixed 4.
+- **Training**: random chunks with MUSAN and RIR augmentation, an optional pre-training stage on simulated mixtures, and a held-out validation split.
+- **Evaluation protocol**: epochs, checkpoint averaging and post-processing settings are all chosen on validation data, and the test set is scored once.
 
-## Results Summary on DIHARD III (Track 2)
+## Results on VoxConverse
 
-| Model                         | DER (%) |
-|-------------------------------|---------|
-| VBx-HMM with OSD              | 21.97   |
-| EEND                          | 20.05   |
-| mm-TS-VAD+ with Augmentation  | 22.36   |
-| TS-VAD+ (our best model)      | 19.11   |
-| SOTA (ANSD-MA-MSE)            | 16.76   |
+Both rows were trained and evaluated in this repo on VoxConverse: the dev set was split 80/20 by recording into train and validation, and the test set (232 recordings, 43.5 h) was scored once, after averaging the 5 best checkpoints and tuning the post-processing on validation only. Speaker profiles for the test set come from the ground truth RTTMs (oracle profiles), so a pipeline with clustered profiles would score worse. Each model was trained once.
 
-The best TS-VAD+ configuration (ECAPA-TDNN + WavLM + VBx + VAD) achieves a DER of **19.11%** improving upon intial result of **22.57%** and surpassing other models such as VBx-HMM and EEND, particularly in high-overlap scenarios such as meetings and restaurants.
+| Model | DER collar 0.25 (%) | DER collar 0 (%) | Missed (%) | False alarm (%) | Confusion (%) |
+|---|---|---|---|---|---|
+| TS-VAD++ (per-frame output head) | **10.97** | **15.05** | 5.62 | 3.75 | 5.69 |
+| Legacy output head (pre-fix reshape) | 12.17 | 16.68 | 5.58 | 4.27 | 6.84 |
+
+The legacy row is the same model with the old output layer: same WavLM features, ECAPA profiles, data, augmentation and training schedule, so the only difference is the head. It is not a re-implementation of the 2020 TS-VAD (MFCC, CNN, BLSTMP, i-vectors), and no run of that model is reported here. The gap is 1.6 DER points at collar 0, mostly from speaker confusion. With one run per model and validation DER moving by 1 to 2 points between epochs, treat the gap as suggestive. On the validation split the two heads end up almost identical (8.74% against 8.82% after averaging and tuning), but the fixed head trains faster at the start (validation DER 59.6% against 94.4% after the first epoch).
+
+Planned next (not yet implemented): speaker-wise attention so speakers attend to each other and the output no longer depends on slot order (as in ANSD-MA-MSE [4]), two pass refinement of the profiles, realistic (clustered) profiles during training, all 12 WavLM layers and longer chunks.
 
 ---
 ## Requirements
@@ -64,6 +66,20 @@ mkdir -p ts-vad/pretrained_models
 - Augmentation data: [MUSAN](https://www.openslr.org/17/) and [RIRS_NOISES](https://www.openslr.org/28/).
 
 The speaker-encoder type is chosen from the checkpoint file name: `ecapa*` → ECAPA-TDNN (default), `campplus*` → CAM++, `eres2net*` → ERes2Net. CAM++ / ERes2Net additionally need their model code (`Cam_plusplus/`, `eres2net/`, from 3D-Speaker) on the Python path; it is not included in this repo.
+
+## Prepare VoxConverse (free alternative to DIHARD3)
+
+DIHARD3 needs an LDC licence. VoxConverse is free, and `prepare_voxconverse.py` converts the Hugging Face release into the same folder layout, so every later script runs unchanged (VoxConverse dev is used as "dev", VoxConverse test as "eval").
+
+```bash
+pip install huggingface_hub pyarrow
+python -c "from huggingface_hub import snapshot_download; snapshot_download('diarizers-community/voxconverse', repo_type='dataset', local_dir='/abs/path/voxconverse_hf')"
+cd ts-vad/prepare
+python prepare_voxconverse.py --hf_dir /abs/path/voxconverse_hf --out_root /abs/path/voxconverse    # also prints speech lost per --max_speaker
+DIHARD_ROOT=/abs/path/voxconverse MAX_SPEAKER=8 SOURCE=../pretrained_models/ecapa-tdnn.model ./prepare_dihard.sh
+```
+
+The converter writes 16 kHz wav files and ground truth RTTMs. The "eval" folder holds ground truth RTTMs, so test profiles are oracle profiles; replace those files with clustering output (keeping `all.rttm` as the reference) to evaluate with realistic profiles. VoxConverse has no domain labels, so the train/validation split is random and the per-domain table is skipped. No 8 kHz round trip is used. With `MAX_SPEAKER=8`, speakers beyond the top 8 by talk time are dropped, which loses 0.87% of dev and 1.4% of test speaker talk time.
 
 ## Prepare DIHARD3
 
@@ -156,7 +172,7 @@ DIHARD_ROOT=/abs/path/DIHARD3_mini ./run_smoke.sh
 
 Outputs go to `ts-vad/exps/smoke/` (training) and `ts-vad/exps/smoke/final/` (validation, tuned post-processing, eval). Expect the loss to fall slightly and DER to stay high. This run checks that the code works, not model quality. On synthetic data it takes about 2 minutes and 1.5 GB of RAM.
 
-## Training on DIHARD3
+## Training
 
 All run scripts read their paths from environment variables (or edit the defaults at the top of each script):
 
@@ -324,9 +340,9 @@ Per-domain results are written to `scoring/individual_scores/`.
 ### What to expect
 
 - Example: the RTTM bundled in `scoring/res.rttm` scores **DER 24.40%** at collar 0 (MS 13.12%, FA 7.62%, SC 3.65%) and 11.65% at collar 0.25 against `scoring/all_rttm` (md-eval, full set, no UEM). With the 40 ms timing fix: 23.84%.
-- The best configuration in the Results Summary above reached 19.11%.
-- With VBx RTTMs as speaker input, DER at collar 0 should be roughly in the 19–25% range. With oracle (ground-truth) speaker profiles it should be clearly lower.
-- Most of the remaining error is missed speech, not speaker confusion.
+- On VoxConverse test with oracle profiles, TS-VAD++ reaches 10.97% DER at collar 0.25 and 15.05% at collar 0 (see Results on VoxConverse).
+- With profiles taken from a clustering system instead of ground truth, expect a higher DER than with oracle profiles.
+- On the bundled DIHARD3 example, most of the error is missed speech. On VoxConverse test, missed speech and speaker confusion are about equal.
 
 ## Output head fix (changes vs. earlier versions)
 
@@ -338,15 +354,14 @@ The head is now a per-frame `Linear(384, max_speaker)`: frame *t* of every speak
 - **Old checkpoints** (including those behind the results above) can still be evaluated with `--legacy_head true` (`LEGACY_HEAD=true ./run_eval.sh`).
 - **Fine-tuning an old checkpoint** without `--legacy_head` loads everything except the output layer, which is trained from scratch (a warning is printed).
 
-The results table was produced with the old head. Re-train to measure the effect of the fix.
+Training both heads on VoxConverse under identical settings gave 15.05% (per-frame head) against 16.68% (legacy head) test DER at collar 0, one run each (see Results on VoxConverse).
 
 ## Notes
 
 - Speaker embeddings come from an ECAPA-TDNN trained on CnCeleb1+2 and the AliMeeting training set.
 - If scripts are not executable after cloning: `chmod +x ts-vad/*.sh ts-vad/prepare/*.sh scoring/*.sh scoring/utils/*.py scoring/utils/parse_options.sh`.
-- Epochs and thresholds in the Results Summary were selected on the DIHARD3 eval set. The current scripts select them on a held-out dev split instead (`run_train.sh` + `run_final.sh`), so new numbers are not directly comparable with that table.
+- Epochs, checkpoint averaging and post-processing are selected on a held-out validation split (`run_train.sh` + `run_final.sh`), never on the test set.
 - The validation speaker profiles come from ground-truth dev RTTMs (oracle), while eval profiles come from clustering output. Validation DER is therefore lower than eval DER, and post-processing tuned on validation may not be exactly optimal for eval. To match eval conditions, run your clustering (e.g. VBx) on the validation recordings and prepare them as a separate split: put `wav/` and the clustering RTTMs in `third_dihard_challenge_devval/data/` and run `TYPES=devval ./prepare/prepare_dihard.sh`. Then point validation at that folder (`--eval_path`, `--eval_list .../ts_devval.json`), keeping `val_all.rttm` as the reference.
-- `model/selective_scan_interface.py` (Mamba) and `prepare/prepare_dihard_old.py` are not used by the default pipeline.
 
 ## References
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-train TS-VAD+ on simulated data (then fine-tune on DIHARD3 with run_train.sh INIT_MODEL=...).
+# Pre-train TS-VAD++ on simulated data (then fine-tune on DIHARD3 with run_train.sh INIT_MODEL=...).
 set -euo pipefail
 cd "$(dirname "$0")"
 

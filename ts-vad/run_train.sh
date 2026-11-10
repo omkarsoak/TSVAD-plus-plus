@@ -19,6 +19,7 @@ LR=${LR:-0.0001}
 LR_DECAY=${LR_DECAY:-0.95}
 N_CPU=${N_CPU:-16}
 EVAL_EPOCHS=${EVAL_EPOCHS:-all}                         # validate every epoch (feeds best.model / checkpoint averaging)
+LEGACY_HEAD=${LEGACY_HEAD:-false}                       # true = old output reshape (ablation baseline for the head fix)
 
 DEV="$DIHARD_ROOT/third_dihard_challenge_dev/data"
 
@@ -45,4 +46,5 @@ ${INIT_MODEL:+--init_model "$INIT_MODEL"} \
 --max_epoch "$MAX_EPOCH" \
 --n_cpu "$N_CPU" \
 --eval_epochs "$EVAL_EPOCHS" \
+--legacy_head "$LEGACY_HEAD" \
 --train

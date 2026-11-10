@@ -120,7 +120,7 @@ def get_args():
 	parser.add_argument('--source', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pretrained_models', 'ecapa-tdnn.model'), help='path of the speaker encoder checkpoint (ecapa-tdnn.model, campplus*.pt or eres2net*.pt)')
 	parser.add_argument('--length_embedding', type=float, default=6, help='length of embeddings, seconds')
 	parser.add_argument('--step_embedding', type=float, default=1, help='step of embeddings, seconds')
-	parser.add_argument('--batch_size', type=int, default=96, help='step of embeddings, seconds')
+	parser.add_argument('--batch_size', type=int, default=96, help='number of embedding windows per forward pass')
 	parser.add_argument('--min_clean_dur', type=float, default=2.0, help='seconds of non-overlapped speech needed to build a profile from clean speech only')
 	parser.add_argument('--min_speaker_dur', type=float, default=0.5, help='speakers with less profile audio than this are dropped')
 	parser.add_argument('--overlap_fallback', type=lambda v: str(v).lower() in ('1', 'true', 'yes'), default=True,
@@ -277,15 +277,22 @@ def main():
 	for file in tqdm.tqdm(files):
 		if 'all.wav' not in file:
 			embeddings = []
-			wav_length = wave.open(file, 'rb').getnframes() # entire length for target speech
+			# read the file once and run the windows through the encoder in batches (the model is in eval mode and
+			# normalises each window on its own, so this gives the same embeddings as one window at a time)
+			target_speech, _ = soundfile.read(file)
+			wav_length = len(target_speech)
 			win = int(args.length_embedding * 16000)
 			starts = list(range(0, wav_length - win, int(args.step_embedding * 16000))) if wav_length > win else [0]
-			for start in starts:
-				stop = min(start + win, wav_length)
-				target_speech, _ = soundfile.read(file, start = start, stop = stop)
-				target_speech = torch.FloatTensor(numpy.array(target_speech))
-				with torch.no_grad():
-					embeddings.extend(model.forward(target_speech.unsqueeze(0).to(DEVICE)))
+			windows = [target_speech[start:min(start + win, wav_length)] for start in starts]
+			for b in range(0, len(windows), args.batch_size):
+				chunk = windows[b:b + args.batch_size]
+				if len(set(len(w) for w in chunk)) == 1:
+					batches = [torch.FloatTensor(numpy.stack(chunk))]
+				else:
+					batches = [torch.FloatTensor(numpy.array(w)).unsqueeze(0) for w in chunk]
+				for batch in batches:
+					with torch.no_grad():
+						embeddings.extend(model.forward(batch.to(DEVICE)))
 			if embeddings:
 				embeddings = torch.stack(embeddings)
 				output_file = args.target_embedding + '/' + file.split('/')[-2] + '/' + file.split('/')[-1].replace('.wav', '.pt')

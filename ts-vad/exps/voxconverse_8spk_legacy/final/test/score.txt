@@ -1,0 +1,2 @@
+Eval full 0.25: 1 epoch, DER 12.17%, MS 3.48%, FA 2.38%, SC 6.31%, LOSS 0.103622
+Eval full 0.00: 1 epoch, DER 16.68%, MS 5.58%, FA 4.27%, SC 6.84%, LOSS 0.103622

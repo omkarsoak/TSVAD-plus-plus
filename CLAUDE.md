@@ -2,19 +2,22 @@
 
 Context for working in this repo. README.md is the user-facing guide, `explaination.md` (gitignored) is a beginner explainer, and this file records architecture, data contracts, decisions, gotchas and open work.
 
-**Project name:** the user's project is **TS-VAD++: Overlap-Aware Speaker Diarization**, built on the TS-VAD+ code in this repo. Don't call it "multimodal": it is audio-only. The user rejected that wording for accuracy.
+**Project name:** the user's project is **TS-VAD++: Overlap-Aware Speaker Diarization**, implemented in this repo. Don't call it "multimodal": it is audio-only. The user rejected that wording for accuracy. The docs (README, this file) must not use the name "TS-VAD+" (the user asked for it to be removed); the only comparison model named in the docs is the original TS-VAD (2020).
 
-## Status (2026-11-09)
+**Claim discipline for the legacy-head baseline:** the model trained with `--legacy_head true` is the same WavLM + ECAPA + transformer system with the old output reshape. It is **not** the 2020 TS-VAD. The 2020 model (Medennikov et al., arXiv 2005.07272, Fig. 1, checked 2026-11-10) is: MFCC -> 4-layer CNN -> a shared 2-layer BLSTMP speaker-detection block run per speaker together with that speaker's i-vector -> a 1-layer BLSTMP combining block -> 4 fixed speaker outputs. It has never been trained in this repo. The user asked (2026-11-10) to label the legacy-head run as the 2020 TS-VAD trained on VoxConverse; that was declined because it would misstate what was run. Docs call it "legacy output head (pre-fix reshape)". Only a faithful MFCC/CNN/BLSTMP/i-vector implementation, actually trained, could be called a 2020 TS-VAD comparison.
 
-- **Done:** Step 0 (evaluation protocol) and Tier 1 (cheap wins) of the improvement plan below, verified end to end on CPU with synthetic data.
-- **Next:** the user moves the project to their GPU cluster and trains the new baseline (fixed head + validation protocol + short-speaker profiles).
+## Status (2026-11-10)
+
+- **Done:** Step 0 (evaluation protocol) and Tier 1 (cheap wins) of the improvement plan below, verified end to end on CPU with synthetic data, **and the first real baseline**: trained and evaluated on VoxConverse (fixed head, validation protocol, short-speaker profiles, MUSAN/RIR augmentation). See "Current experiment: VoxConverse" below. DIHARD3 is unavailable to the user (LDC licence), so VoxConverse replaces it.
+- **Next:** (a) ablations for the TS-VAD++ contributions (legacy head baseline, then Tier 2 items), each as its own run with a fresh `SAVE_PATH`; (b) DER broken down by number of speakers (test error is dominated by recordings with many speakers); (c) a real clustering step (pyannote or similar) so test profiles are not oracle; (d) the user's pending decisions: commit the work, extend `.gitignore` (`ts-vad/exps/*/model/`, `*.model`, `ts-vad/pretrained_models/`).
 - **Diagrams (done, not compiled):** `diagrams/workflow.md` (data to final evaluation pipeline) and `diagrams/architecture.md` (model data flow) are Obsidian TikZJax blocks written to the user's TikZ rules. They are untested because LaTeX is not installed locally (the user declined installing it), so ask the user to confirm they render and fix any TikZJax errors they report.
 - **User's global instructions live on the Windows side:** `/mnt/c/Users/omkar/.claude/CLAUDE.md` (the WSL `~/.claude/CLAUDE.md` is empty). Read it when the user mentions their main instructions. Key rules: banned words (Delve, Tapestry, Vibrant, Landscape, Realm, Embark, Excels, Vital, Pivotal, Thrilled); no dashes of any kind in sentences, and no bold or italics in text given to the user; `$ $` and `$$ $$` for math; TikZ for TikZJax must start with `\begin{document}`, use `\begin{tikzpicture}[font=\sffamily\bfseries, >=latex]`, no `\textbf`, a `\useasboundingbox` padding, simple diagrams, basic colors. Also saved as a memory note.
-- **Not committed:** git is initialised with no commits yet; everything is staged or untracked.
+- **Not committed:** the 2026-11-09/10 changes are uncommitted (batched embedding extraction in `prepare_dihard.py`, `prepare_voxconverse.py`, the dead-file deletions, doc edits, `.gitignore`). `ts-vad/exps/` and `ts-vad/pretrained_models/` are untracked.
 
 ## Environment
 
-- **Local machine (WSL2):** Intel Iris Xe GPU only (no CUDA), 16 cores, ~7 GB RAM. Use it for editing and CPU smoke tests only, never real training.
+- **Active machine (since 2026-11-09), host `hotaru`, user `oak`:** Linux with 8 NVIDIA RTX 6000 Ada (48 GB each), 32 cores, ~1.5 TB RAM, shared with other users, so check `nvidia-smi` and pick a free GPU with `CUDA_VISIBLE_DEVICES`. No Slurm or PBS: run training in `tmux` (so it survives SSH disconnects) and tee output to a log. Miniforge at `/home/oak/miniforge3` (`mamba` available); `sox` and `perl` are installed. The repo is at `/home/oak/workspace/TSVAD-plus-plus`, data at `/home/oak/workspace/data/` (outside the repo). The `tsvad` env was created with `mamba env create -f tsvad.yml` plus `pip install sox gdown huggingface_hub pyarrow`; torch sees CUDA.
+- **Previous local machine (WSL2, CPU only; kept for history):** Intel Iris Xe GPU only (no CUDA), 16 cores, ~7 GB RAM. Use it for editing and CPU smoke tests only, never real training.
 - **Conda env `tsvad`** (created 2026-11-09 from `tsvad.yml`): Python 3.8.17, torch 2.0.1+cu117, torchaudio 2.0.2, numpy 1.22.4, plus `pip install sox`. Run scripts with `PATH=/home/omkar/miniforge3/envs/tsvad/bin:$PATH` or `conda activate tsvad`. The command-line `sox` is **not** installed (needs `sudo apt-get install sox`, which the user does).
 - **Default env `myenv`:** Python 3.14, no torch.
 - **Training:** the user's GPU cluster (scheduler unknown; `ts-vad/job.pbs` and `ts-vad/job.slurm` both exist). The original runs used 1 GPU, 16 CPUs, 128–189 GB RAM and a 24 h walltime.
@@ -46,14 +49,12 @@ ts-vad/
   run_train_sim.sh              simulated-data pre-training (validates on the dev val split)
   run_smoke.sh                  run_train.sh + run_final.sh with tiny settings (CPU)
   job.pbs / job.slurm / prepare/*.pbs   cluster wrappers (activate `tsvad`, call the run scripts)
-  job_copy.pbs                  dead: calls nonexistent test_ddp.py
   model/ts_vad.py               TS_VAD model
   model/WavLM.py, modules.py    WavLM implementation + attention modules
-  model/selective_scan_interface.py, model/ecapa_tdnn.py   unused
   prepare/prepare_dihard.py(.sh)     targets, embeddings, ts_{split}.json; the .sh also runs split_dev.py after dev
   prepare/split_dev.py               dev -> ts_train.json / ts_val.json / val_recordings.txt / val_all.rttm
   prepare/make_mini_dihard.sh        copy N recordings per split (+ uem_scoring) for local tests
-  prepare/prepare_dihard_old.py      older ECAPA-only version, unused
+  prepare/prepare_voxconverse.py     Hugging Face VoxConverse parquet -> DIHARD layout (dev -> dev, test -> eval), prints talk time lost per MAX_SPEAKER
   prepare/prepare_simulated.py(.sh), prepare/simulated_data_prep_utils/   simulated data prep
   prepare/speaker_encoder.py         ECAPA_TDNN used by prep (raw 16 kHz wav -> 192-d)
   tools.zip                     must be unzipped in ts-vad/
@@ -94,7 +95,9 @@ ts-vad/
 - **Validation split:** `split_dev.py` holds out ~20% of dev recordings (`--val_frac`, `--seed 0`), stratified by domain from `dev/data/uem_scoring/{full,core}/<domain>.uem` (random split if missing). Every domain with ≥ 2 recordings appears in validation, and train keeps ≥ 2 recordings.
 - Validation profiles come from ground truth (oracle), while eval profiles come from clustering, so validation DER < eval DER. Matching eval conditions requires a `devval` split prepared from clustering RTTMs (documented in the README; not automated).
 - Speaker label parsing strips a `speaker` prefix if present (VBx `1`, `spk01` also work). The speaker-encoder type comes from the checkpoint file-name prefix (`ecap` default, `camp`, `eres`). The ECAPA loader strips a `speaker_encoder.` prefix and raises if 0 tensors match.
-- DIHARD audio goes 16 kHz -> 8 kHz -> 16 kHz to match the simulated pre-training data.
+- DIHARD audio goes 16 kHz -> 8 kHz -> 16 kHz to match the simulated pre-training data. VoxConverse is used at 16 kHz with no round trip (there is no simulated pre-training in that experiment).
+- **VoxConverse layout (see "Current experiment"):** `prepare_voxconverse.py` writes the DIHARD folder names so every script runs unchanged: VoxConverse dev -> `third_dihard_challenge_dev/data/{wav,rttm}`, test -> `third_dihard_challenge_eval/data/{wav,rttm,all.rttm}`. Speaker labels are stripped of underscores (`prepare_dihard.py` reads the part after the last `_` as a name). No `uem_scoring`, so the per-domain table is skipped and `split_dev.py` makes a random (not domain-stratified) split.
+- **Embedding extraction** in `prepare_dihard.py` now reads each file once and batches windows (`--batch_size`, default 96). Equivalent to the old one-window loop (cosine >= 0.999999, GPU rounding), about 15x faster on 1,112 windows. The old loop used ~600 MB of GPU and 13% utilisation.
 
 ## Eval / post-processing
 
@@ -116,18 +119,33 @@ ts-vad/
 ## Training / resume behaviour
 
 - When training, an existing `SAVE_PATH/model/model_*.model` takes priority over `--init_model` (requeue-safe); in `--eval` mode `--init_model` wins. Use a fresh `SAVE_PATH` per experiment.
-- run_train.sh env overrides: `DIHARD_ROOT MUSAN RIRS SAVE_PATH INIT_MODEL MAX_SPEAKER SPEECH_ENCODER BATCH_SIZE MAX_EPOCH WARM_UP_EPOCH LR LR_DECAY N_CPU EVAL_EPOCHS`.
+- run_train.sh env overrides: `DIHARD_ROOT MUSAN RIRS SAVE_PATH INIT_MODEL MAX_SPEAKER SPEECH_ENCODER BATCH_SIZE MAX_EPOCH WARM_UP_EPOCH LR LR_DECAY N_CPU EVAL_EPOCHS LEGACY_HEAD` (`LEGACY_HEAD=true` trains the old head for the ablation baseline; `run_final.sh` must then also get `LEGACY_HEAD=true`).
 - run_final.sh env: `DIHARD_ROOT TRAIN_DIR OUT AVG_N MODEL MAX_SPEAKER LEGACY_HEAD SPEECH_ENCODER N_CPU BATCH_SIZE TEST_SHIFT`.
 - prepare_dihard.sh env: `DIHARD_ROOT SOURCE MAX_SPEAKER MIN_CLEAN_DUR MIN_SPEAKER_DUR VAL_FRAC SEED TYPES`.
 - `--simtrain` / `--legacy_head` use `str2bool` with `nargs='?'`. `--max_speaker` defaults to 8 and must match prep.
 
 ## Results / baselines
 
-- README table (DIHARD3, collar 0): VBx+OSD 21.97, EEND 20.05, mm-TS-VAD+ 22.36, **TS-VAD+ best 19.11** (initial 22.57), SOTA ANSD-MA-MSE 16.76. Produced with the **legacy head**, with epochs and thresholds selected on the eval set (optimistic). No ablation, and no comparison against the original 2020 TS-VAD.
 - Bundled `scoring/res.rttm` vs `scoring/all_rttm` (md-eval, no UEM):
   - collar 0: DER **24.40%** (MS 13.12, FA 7.62, SC 3.65); with the 40 ms fix, 23.84%;
   - collar 0.25: 11.65% (MS 7.33, FA 1.44, SC 2.88).
-- **Missed speech is the dominant error.**
+- **Missed speech is the dominant error** (on the bundled DIHARD3 example; on VoxConverse test, speaker confusion is about as large as missed speech).
+- **VoxConverse baseline (2026-11-10, `exps/voxconverse_8spk`, fixed head, no ablation yet):** VoxConverse **test** (232 recordings, 43.5 h), averaged model, post-processing tuned on validation, scored once, **oracle (ground-truth) profiles**:
+  - collar 0: DER **15.05%** (MS 5.62, FA 3.75, SC 5.69);
+  - collar 0.25: DER **10.97%** (MS 4.02, FA 1.78, SC 5.17).
+- **Validation (43 dev recordings, 4.85 h, oracle profiles):** best single epoch 31 at 11.16% (collar 0); average of epochs 26, 29, 30, 31, 32 gives 8.81% with default post-processing and 8.74% tuned (`threshold 0.5, median_kernel 1, min_silence 0.48, min_speech 0.16`). Validation is optimistic because the checkpoints were chosen on it, and the test set is harder (26% of test recordings have more than 8 speakers vs 9% in dev; the 8-slot cap alone loses 1.4% of test talk time vs 0.87% in dev). Validation DER is noisy across epochs (11.2% to 13.6% over epochs 31 to 39).
+- Published VoxConverse numbers have not been checked against these; as far as the author recalls they are usually reported at collar 0.25, but verify before citing.
+- **Ablation 1, output head (2026-11-10; the baseline is the legacy output head, not the 2020 TS-VAD; single seed each, identical data/settings/epochs; `exps/voxconverse_8spk_legacy` trained with `LEGACY_HEAD=true`):**
+
+  | | Fixed head | Legacy head |
+  |---|---|---|
+  | Best single epoch, val DER (collar 0) | 11.16% (ep 31) | 12.05% (ep 36) |
+  | Average of best 5, val, default post-proc | 8.81% | 9.05% |
+  | Average of best 5, val, tuned post-proc | 8.74% | 8.82% |
+  | Test DER, collar 0 (MS / FA / SC) | **15.05%** (5.62 / 3.75 / 5.69) | 16.68% (5.58 / 4.27 / 6.84) |
+  | Test DER, collar 0.25 | **10.97%** | 12.17% |
+
+  Reading: validation shows almost no difference after averaging and tuning (0.08 points), while the test set favours the fixed head by 1.6 points (collar 0), mostly through speaker confusion (SC) and false alarm. Early training is much faster with the fixed head (epoch 1 val DER 59.6% vs 94.4%). With one seed per head and per-epoch validation noise of 1 to 2 points, treat the test gap as suggestive, not proven; a second seed per head is needed for a firm claim.
 - Synthetic end-to-end smoke test (2026-11-09; random encoders, so the numbers are meaningless): the full chain ran in 125 s and 1.4 GB. Tuning moved validation DER from 100% (default threshold 0.5) to 37% (threshold 0.3), which shows why tuning on validation matters for an under-trained model.
 
 ## Improvement plan for TS-VAD++
@@ -159,7 +177,7 @@ Step 0 and Tier 1 are implemented. Train each step as its own run and record val
   - better simulated conversations;
   - multi-GPU (DDP);
   - a config file instead of long CLIs;
-  - remove dead files (`job_copy.pbs`, `prepare_dihard_old.py`, Mamba file) once the user confirms.
+  - (dead files `job_copy.pbs`, `prepare_dihard_old.py`, `prepare_simulated_new.py`, the Mamba file and `model/ecapa_tdnn.py` were removed on 2026-11-09; they are in git history.)
 
 ## Change log
 
@@ -183,6 +201,25 @@ Step 0 and Tier 1 are implemented. Train each step as its own run and record val
   - README sections for validation, final evaluation and the timing fix.
   - Verified with the real scripts on a synthetic DIHARD-layout tree (edge cases: 0.3 s speaker dropped, overlap-fallback profile, 6 speakers > max_speaker 4, 2 domains): ids/wav/embedding consistency, no train/val leakage, best.model, averaging, tuning, final eval with per-domain table.
   - Not verified: real ECAPA/WavLM weights, real DIHARD data, GPU/AMP path after these changes.
+- **2026-11-09/10 (c), new server, VoxConverse experiment:**
+  - Env, weights (`WavLM-Base+.pt`, `ecapa-tdnn.model` from the README Google Drive links via `gdown`), `tools.zip` unzipped.
+  - `prepare/prepare_voxconverse.py` (Hugging Face `diarizers-community/voxconverse` parquet -> DIHARD layout, prints talk time lost per `MAX_SPEAKER`; K=8 loses 0.87% dev / 1.41% test).
+  - Batched embedding extraction in `prepare_dihard.py` (15x faster).
+  - MUSAN and RIRS_NOISES downloaded and extracted to `data/aug_musan/musan` and `data/aug_rirs/RIRS_NOISES/simulated_rirs` (2016 and 60,000 wavs). MUSAN came from the unofficial HF mirror `Emulated-Inc/enhancement` (SHA256 matched that repo's list); RIRS came from OpenSLR and matched the same list.
+  - Removed dead files: `job_copy.pbs`, `prepare_dihard_old.py`, `prepare_simulated_new.py`, `model/selective_scan_interface.py`, `model/ecapa_tdnn.py`.
+  - Trained 39 epochs (`MAX_EPOCH=40`), then `run_final.sh`. Results above.
+  - Verified on this machine: the real scripts end to end on real audio with real ECAPA/WavLM weights and the GPU/AMP path.
+
+## Current experiment: VoxConverse (reproduce)
+
+Data (all outside the repo, under `/home/oak/workspace/data/`):
+- `voxconverse_hf/` raw parquet (6.8 GB); `voxconverse/` converted + prepared (`MAX_SPEAKER=8`); `dl/` downloaded archives (can be deleted).
+- Convert: `python ts-vad/prepare/prepare_voxconverse.py --hf_dir .../voxconverse_hf --out_root .../voxconverse`.
+- Prepare: `DIHARD_ROOT=.../voxconverse MAX_SPEAKER=8 SOURCE=../pretrained_models/ecapa-tdnn.model ts-vad/prepare/prepare_dihard.sh` (dev, then eval).
+- Train (in tmux, tee to `exps/voxconverse_8spk/train.log`): `CUDA_VISIBLE_DEVICES=<free gpu> DIHARD_ROOT=.../voxconverse MUSAN=.../aug_musan/musan RIRS=.../aug_rirs/RIRS_NOISES/simulated_rirs SAVE_PATH=exps/voxconverse_8spk MAX_SPEAKER=8 MAX_EPOCH=40 BATCH_SIZE=40 N_CPU=16 ./run_train.sh`.
+- Final: `CUDA_VISIBLE_DEVICES=<gpu> DIHARD_ROOT=.../voxconverse TRAIN_DIR=exps/voxconverse_8spk MAX_SPEAKER=8 ./run_final.sh` (outputs in `exps/voxconverse_8spk/final/`).
+
+Measured speeds on an RTX 6000 Ada: about 2.6 min per training epoch (batch 40, ~360 steps, ~11.5 GB, WavLM unfrozen), batch 80 only about 20% faster (22 GB, GPU saturated), about 0.4 min validation per epoch plus md-eval scoring, so about 3 min per epoch overall. `run_final.sh`: validation inference 5.4 min (4.85 h), test inference about 37 min (43.5 h), tuning 336 settings a few minutes. GPU utilisation dips between epochs (the loader is rebuilt each epoch and validation scoring is CPU work), so a low reading at that moment is normal.
 
 ## Conventions
 

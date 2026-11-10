@@ -1,5 +1,5 @@
 #!/bin/bash
-# Slurm job: train TS-VAD+.  Submit from ts-vad/:
+# Slurm job: train TS-VAD++.  Submit from ts-vad/:
 #   sbatch --export=ALL,DIHARD_ROOT=...,MUSAN=...,RIRS=... job.slurm
 #SBATCH --job-name=tsvad_train
 #SBATCH --gres=gpu:1

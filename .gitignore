@@ -7,4 +7,9 @@ resume.md
 explaination.md
 # Unzipped from tools.zip (md-eval scorer + helpers)
 ts-vad/tools
-ts-vad/tools.zip
+ts-vad/exps/*/model/
+# Weights, checkpoints and large arrays (too big for GitHub; regenerate or download)
+*.model
+*.pt
+*.npz
+ts-vad/pretrained_models/

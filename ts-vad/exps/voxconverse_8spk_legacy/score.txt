@@ -1,0 +1,117 @@
+Train: 1 epoch, LR 0.000100, LOSS 0.365022
+Eval full 0.25: 1 epoch, DER 94.18%, MS 91.08%, FA 0.33%, SC 2.77%, LOSS 0.349366
+Eval full 0.00: 1 epoch, DER 94.36%, MS 91.08%, FA 0.44%, SC 2.85%, LOSS 0.349366
+Train: 2 epoch, LR 0.000095, LOSS 0.285897
+Eval full 0.25: 2 epoch, DER 60.52%, MS 49.34%, FA 2.25%, SC 8.93%, LOSS 0.275931
+Eval full 0.00: 2 epoch, DER 63.05%, MS 51.04%, FA 3.05%, SC 8.96%, LOSS 0.275931
+Train: 3 epoch, LR 0.000090, LOSS 0.196063
+Eval full 0.25: 3 epoch, DER 42.30%, MS 29.89%, FA 2.28%, SC 10.13%, LOSS 0.187773
+Eval full 0.00: 3 epoch, DER 45.69%, MS 31.94%, FA 3.43%, SC 10.32%, LOSS 0.187773
+Train: 4 epoch, LR 0.000086, LOSS 0.160850
+Eval full 0.25: 4 epoch, DER 39.87%, MS 28.19%, FA 2.35%, SC 9.33%, LOSS 0.199451
+Eval full 0.00: 4 epoch, DER 43.30%, MS 30.07%, FA 3.58%, SC 9.65%, LOSS 0.199451
+Train: 5 epoch, LR 0.000081, LOSS 0.133340
+Eval full 0.25: 5 epoch, DER 25.75%, MS 13.99%, FA 3.52%, SC 8.24%, LOSS 0.169915
+Eval full 0.00: 5 epoch, DER 29.92%, MS 15.58%, FA 5.40%, SC 8.95%, LOSS 0.169915
+Train: 6 epoch, LR 0.000077, LOSS 0.106793
+Eval full 0.25: 6 epoch, DER 25.78%, MS 15.68%, FA 2.59%, SC 7.51%, LOSS 0.157754
+Eval full 0.00: 6 epoch, DER 29.76%, MS 17.49%, FA 4.24%, SC 8.03%, LOSS 0.157754
+Train: 7 epoch, LR 0.000074, LOSS 0.091470
+Eval full 0.25: 7 epoch, DER 22.87%, MS 15.99%, FA 1.23%, SC 5.66%, LOSS 0.138802
+Eval full 0.00: 7 epoch, DER 26.96%, MS 18.09%, FA 2.79%, SC 6.08%, LOSS 0.138802
+Train: 8 epoch, LR 0.000070, LOSS 0.081846
+Eval full 0.25: 8 epoch, DER 25.01%, MS 18.95%, FA 0.68%, SC 5.38%, LOSS 0.129599
+Eval full 0.00: 8 epoch, DER 29.05%, MS 21.81%, FA 1.70%, SC 5.54%, LOSS 0.129599
+Train: 9 epoch, LR 0.000066, LOSS 0.074517
+Eval full 0.25: 9 epoch, DER 19.97%, MS 9.85%, FA 2.53%, SC 7.59%, LOSS 0.130266
+Eval full 0.00: 9 epoch, DER 24.03%, MS 11.63%, FA 4.39%, SC 8.02%, LOSS 0.130266
+Train: 10 epoch, LR 0.000063, LOSS 0.067121
+Eval full 0.25: 10 epoch, DER 17.86%, MS 10.12%, FA 2.15%, SC 5.59%, LOSS 0.105425
+Eval full 0.00: 10 epoch, DER 21.85%, MS 12.24%, FA 3.65%, SC 5.96%, LOSS 0.105425
+Train: 11 epoch, LR 0.000060, LOSS 0.061006
+Eval full 0.25: 11 epoch, DER 17.64%, MS 10.95%, FA 2.20%, SC 4.49%, LOSS 0.116237
+Eval full 0.00: 11 epoch, DER 21.56%, MS 12.84%, FA 3.76%, SC 4.97%, LOSS 0.116237
+Train: 12 epoch, LR 0.000057, LOSS 0.055812
+Eval full 0.25: 12 epoch, DER 17.88%, MS 12.29%, FA 1.70%, SC 3.89%, LOSS 0.125318
+Eval full 0.00: 12 epoch, DER 21.69%, MS 14.14%, FA 3.15%, SC 4.40%, LOSS 0.125318
+Train: 13 epoch, LR 0.000054, LOSS 0.052340
+Eval full 0.25: 13 epoch, DER 15.53%, MS 9.78%, FA 1.50%, SC 4.25%, LOSS 0.108354
+Eval full 0.00: 13 epoch, DER 19.34%, MS 11.69%, FA 3.00%, SC 4.65%, LOSS 0.108354
+Train: 14 epoch, LR 0.000051, LOSS 0.049194
+Eval full 0.25: 14 epoch, DER 14.26%, MS 8.38%, FA 1.69%, SC 4.19%, LOSS 0.096917
+Eval full 0.00: 14 epoch, DER 18.12%, MS 10.08%, FA 3.36%, SC 4.68%, LOSS 0.096917
+Train: 15 epoch, LR 0.000049, LOSS 0.046114
+Eval full 0.25: 15 epoch, DER 17.22%, MS 12.01%, FA 0.94%, SC 4.27%, LOSS 0.115079
+Eval full 0.00: 15 epoch, DER 20.79%, MS 13.95%, FA 2.19%, SC 4.65%, LOSS 0.115079
+Train: 16 epoch, LR 0.000046, LOSS 0.043508
+Eval full 0.25: 16 epoch, DER 12.15%, MS 6.75%, FA 1.96%, SC 3.44%, LOSS 0.092527
+Eval full 0.00: 16 epoch, DER 15.96%, MS 8.41%, FA 3.69%, SC 3.86%, LOSS 0.092527
+Train: 17 epoch, LR 0.000044, LOSS 0.041195
+Eval full 0.25: 17 epoch, DER 12.12%, MS 7.13%, FA 1.63%, SC 3.36%, LOSS 0.079612
+Eval full 0.00: 17 epoch, DER 15.95%, MS 9.07%, FA 3.06%, SC 3.81%, LOSS 0.079612
+Train: 18 epoch, LR 0.000042, LOSS 0.040462
+Eval full 0.25: 18 epoch, DER 11.70%, MS 5.46%, FA 2.10%, SC 4.14%, LOSS 0.101733
+Eval full 0.00: 18 epoch, DER 15.51%, MS 6.95%, FA 3.97%, SC 4.58%, LOSS 0.101733
+Train: 19 epoch, LR 0.000040, LOSS 0.038049
+Eval full 0.25: 19 epoch, DER 13.69%, MS 8.81%, FA 1.00%, SC 3.87%, LOSS 0.101303
+Eval full 0.00: 19 epoch, DER 17.43%, MS 10.75%, FA 2.44%, SC 4.24%, LOSS 0.101303
+Train: 20 epoch, LR 0.000038, LOSS 0.036622
+Eval full 0.25: 20 epoch, DER 11.77%, MS 7.06%, FA 1.13%, SC 3.57%, LOSS 0.082358
+Eval full 0.00: 20 epoch, DER 15.40%, MS 8.92%, FA 2.59%, SC 3.89%, LOSS 0.082358
+Train: 21 epoch, LR 0.000036, LOSS 0.034494
+Eval full 0.25: 21 epoch, DER 12.60%, MS 7.10%, FA 1.24%, SC 4.26%, LOSS 0.086714
+Eval full 0.00: 21 epoch, DER 16.32%, MS 8.74%, FA 2.94%, SC 4.64%, LOSS 0.086714
+Train: 22 epoch, LR 0.000034, LOSS 0.033967
+Eval full 0.25: 22 epoch, DER 9.94%, MS 5.27%, FA 1.23%, SC 3.44%, LOSS 0.074259
+Eval full 0.00: 22 epoch, DER 13.74%, MS 6.81%, FA 3.13%, SC 3.80%, LOSS 0.074259
+Train: 23 epoch, LR 0.000032, LOSS 0.032085
+Eval full 0.25: 23 epoch, DER 10.77%, MS 5.68%, FA 1.20%, SC 3.89%, LOSS 0.077281
+Eval full 0.00: 23 epoch, DER 14.52%, MS 7.16%, FA 3.17%, SC 4.20%, LOSS 0.077281
+Train: 24 epoch, LR 0.000031, LOSS 0.032165
+Eval full 0.25: 24 epoch, DER 10.33%, MS 6.04%, FA 0.88%, SC 3.41%, LOSS 0.081708
+Eval full 0.00: 24 epoch, DER 13.99%, MS 7.83%, FA 2.39%, SC 3.77%, LOSS 0.081708
+Train: 25 epoch, LR 0.000029, LOSS 0.030676
+Eval full 0.25: 25 epoch, DER 10.07%, MS 4.99%, FA 1.66%, SC 3.42%, LOSS 0.073386
+Eval full 0.00: 25 epoch, DER 13.89%, MS 6.32%, FA 3.73%, SC 3.84%, LOSS 0.073386
+Train: 26 epoch, LR 0.000028, LOSS 0.029199
+Eval full 0.25: 26 epoch, DER 9.97%, MS 5.56%, FA 1.21%, SC 3.21%, LOSS 0.082965
+Eval full 0.00: 26 epoch, DER 13.66%, MS 7.05%, FA 3.05%, SC 3.57%, LOSS 0.082965
+Train: 27 epoch, LR 0.000026, LOSS 0.028707
+Eval full 0.25: 27 epoch, DER 11.11%, MS 6.84%, FA 0.56%, SC 3.71%, LOSS 0.082806
+Eval full 0.00: 27 epoch, DER 14.67%, MS 9.03%, FA 1.72%, SC 3.91%, LOSS 0.082806
+Train: 28 epoch, LR 0.000025, LOSS 0.027609
+Eval full 0.25: 28 epoch, DER 11.00%, MS 6.52%, FA 1.17%, SC 3.31%, LOSS 0.088796
+Eval full 0.00: 28 epoch, DER 14.46%, MS 8.02%, FA 2.82%, SC 3.62%, LOSS 0.088796
+Train: 29 epoch, LR 0.000024, LOSS 0.027080
+Eval full 0.25: 29 epoch, DER 12.07%, MS 7.32%, FA 0.59%, SC 4.16%, LOSS 0.085250
+Eval full 0.00: 29 epoch, DER 15.49%, MS 9.25%, FA 1.89%, SC 4.35%, LOSS 0.085250
+Train: 30 epoch, LR 0.000023, LOSS 0.026645
+Eval full 0.25: 30 epoch, DER 10.77%, MS 6.11%, FA 0.71%, SC 3.95%, LOSS 0.080011
+Eval full 0.00: 30 epoch, DER 14.34%, MS 8.03%, FA 2.11%, SC 4.20%, LOSS 0.080011
+Train: 31 epoch, LR 0.000021, LOSS 0.026604
+Eval full 0.25: 31 epoch, DER 9.66%, MS 4.64%, FA 1.15%, SC 3.88%, LOSS 0.074662
+Eval full 0.00: 31 epoch, DER 13.39%, MS 5.91%, FA 3.24%, SC 4.23%, LOSS 0.074662
+Train: 32 epoch, LR 0.000020, LOSS 0.025103
+Eval full 0.25: 32 epoch, DER 9.46%, MS 4.89%, FA 1.04%, SC 3.53%, LOSS 0.080740
+Eval full 0.00: 32 epoch, DER 13.07%, MS 6.48%, FA 2.76%, SC 3.83%, LOSS 0.080740
+Train: 33 epoch, LR 0.000019, LOSS 0.024593
+Eval full 0.25: 33 epoch, DER 9.01%, MS 5.50%, FA 0.80%, SC 2.72%, LOSS 0.069576
+Eval full 0.00: 33 epoch, DER 12.55%, MS 7.33%, FA 2.21%, SC 3.01%, LOSS 0.069576
+Train: 34 epoch, LR 0.000018, LOSS 0.023955
+Eval full 0.25: 34 epoch, DER 10.32%, MS 6.17%, FA 0.96%, SC 3.19%, LOSS 0.079698
+Eval full 0.00: 34 epoch, DER 13.83%, MS 7.71%, FA 2.59%, SC 3.52%, LOSS 0.079698
+Train: 35 epoch, LR 0.000017, LOSS 0.024518
+Eval full 0.25: 35 epoch, DER 9.45%, MS 5.18%, FA 1.00%, SC 3.27%, LOSS 0.074536
+Eval full 0.00: 35 epoch, DER 12.98%, MS 7.10%, FA 2.33%, SC 3.55%, LOSS 0.074536
+Train: 36 epoch, LR 0.000017, LOSS 0.024521
+Eval full 0.25: 36 epoch, DER 8.60%, MS 4.64%, FA 1.06%, SC 2.90%, LOSS 0.070714
+Eval full 0.00: 36 epoch, DER 12.05%, MS 6.03%, FA 2.78%, SC 3.23%, LOSS 0.070714
+Train: 37 epoch, LR 0.000016, LOSS 0.022709
+Eval full 0.25: 37 epoch, DER 9.17%, MS 5.18%, FA 0.80%, SC 3.19%, LOSS 0.071317
+Eval full 0.00: 37 epoch, DER 12.63%, MS 6.66%, FA 2.46%, SC 3.51%, LOSS 0.071317
+Train: 38 epoch, LR 0.000015, LOSS 0.022187
+Eval full 0.25: 38 epoch, DER 9.05%, MS 4.86%, FA 0.97%, SC 3.22%, LOSS 0.074850
+Eval full 0.00: 38 epoch, DER 12.49%, MS 6.35%, FA 2.63%, SC 3.51%, LOSS 0.074850
+Train: 39 epoch, LR 0.000014, LOSS 0.021183
+Eval full 0.25: 39 epoch, DER 9.48%, MS 4.64%, FA 1.20%, SC 3.64%, LOSS 0.077226
+Eval full 0.00: 39 epoch, DER 12.99%, MS 6.05%, FA 2.89%, SC 4.05%, LOSS 0.077226
